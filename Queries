@@ -111,8 +111,42 @@
       AND totals.transactionRevenue IS NOT NULL
    GROUP BY month;
 
+/Query 07: Other products purchased by customers who purchased product "YouTube Men's Vintage Henley" in July 2017. Output should show product name and the quantity was ordered.
 
+SELECT 
+  product.v2ProductName AS other_purchased_product,
+  COUNT (product.productQuantity) AS quantity
+FROM `bigquery-public-data.google_analytics_sample.ga_sessions_201707*`,
+UNNEST (hits) hits, 
+UNNEST (hits.product) product
+WHERE fullVisitorId IN 
+  (SELECT fullVisitorId 
+  FROM `bigquery-public-data.google_analytics_sample.ga_sessions_201707*`,
+  UNNEST (hits) hits, 
+  UNNEST (hits.product) product
+  WHERE product.v2ProductName = "YouTube Men's Vintage Henley"
+    AND totals.transactions >=1
+  GROUP BY fullVisitorID)
+AND productRevenue is NOT NULL 
+AND product.v2ProductName != "YouTube Men's Vintage Henley"
+GROUP BY other_purchased_product
+ORDER BY quantity DESC;
 
+/Query 08: Calculate cohort map from product view to addtocart to purchase in Jan, Feb and March 2017. For example, 100% product view then 40% add_to_cart and 10% purchase.
+
+    SELECT 
+      format_date("%Y%m", parse_date("%Y%m%d", date)) as month,
+      SUM(CASE WHEN eCommerceAction.action_type = '2' THEN 1 ELSE 0 END) AS num_productview,
+      SUM(CASE WHEN eCommerceAction.action_type = '3' THEN 1 ELSE 0 END) AS num_addtocart,
+      SUM(CASE WHEN eCommerceAction.action_type = '6' THEN 1 ELSE 0 END) AS num_purchases,
+      ROUND(SUM(CASE WHEN eCommerceAction.action_type = '3' THEN 1 ELSE 0 END) / SUM(CASE WHEN eCommerceAction.action_type = '2' THEN 1 ELSE 0 END)*100,2) AS add_to_cart_rate,
+      ROUND(SUM(CASE WHEN eCommerceAction.action_type = '6' THEN 1 ELSE 0 END) / SUM(CASE WHEN eCommerceAction.action_type = '2' THEN 1 ELSE 0 END)*100,2) AS purchase_rate,
+    FROM `bigquery-public-data.google_analytics_sample.ga_sessions_2017*`,
+    UNNEST (hits) hits
+    WHERE 
+      eCommerceAction.action_type IN ('2', '3', '6')
+      AND _table_suffix between '0101' and '0331'
+    GROUP BY month;
 
 
 
