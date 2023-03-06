@@ -1,0 +1,119 @@
+/Query 01: Calculate total visit, pageview, transaction for Jan, Feb and March 2017.
+
+    SELECT 
+      format_date("%Y%m", parse_date("%Y%m%d", date)) as month,
+      sum (totals.visits) AS visits,
+      sum (totals.pageviews	) AS pageviews,
+      sum (totals.totalTransactionRevenue)
+    FROM `bigquery-public-data.google_analytics_sample.ga_sessions_*`
+    WHERE 
+    _table_suffix between '20170101' and '20170331'
+    GROUP BY month 
+    ORDER BY month;
+
+/Query 02: Bounce rate per traffic source in July 2017.
+
+    With bounce_rate_table AS
+    (SELECT 
+      trafficSource.source as source,
+      COUNT (trafficSource.source) AS total_visits,
+      SUM (totals.bounces) AS total_no_bounce
+    FROM `bigquery-public-data.google_analytics_sample.ga_sessions_2017*`
+    WHERE _table_suffix BETWEEN "0701" AND "0731"
+    GROUP BY source)
+
+    SELECT 
+      source, 
+      total_visits, 
+      total_no_bounce,
+      ((total_no_bounce/total_visits)*100) AS bounce_rate
+    FROM bounce_rate_table
+    ORDER BY total_visits DESC;
+    
+ /Query 3: Revenue by traffic source by week, by month in June 2017.
+ 
+    SELECT 
+      'month' as time_type,
+      format_date("%Y%m", parse_date("%Y%m%d", date)) as month,
+      trafficSource.source as source,
+      sum (totals.totalTransactionRevenue) as revenue
+    FROM `bigquery-public-data.google_analytics_sample.ga_sessions_2017*`
+  WHERE  _table_suffix between '0601' and '0631'
+  GROUP BY month, source
+  UNION ALL
+  SELECT 
+    'week' as time_type,
+    format_date("%Y%d", parse_date("%Y%m%d", date)) as week,
+    trafficSource.source as source,
+    sum (totals.totalTransactionRevenue) as revenue
+  FROM `bigquery-public-data.google_analytics_sample.ga_sessions_2017*`
+  WHERE _table_suffix between '0601' and '0631'
+  GROUP BY week, source;
+ 
+/Query 04: Average number of pageviews by purchaser type (purchasers vs non-purchasers) in June, July 2017.
+    WITH purchaser AS 
+    (SELECT 
+      format_date("%Y%m", parse_date("%Y%m%d", date)) as month,
+      (SUM (totals.pageviews)/ COUNT (distinct fullVisitorId)) AS avg_pageview_purchase,
+    FROM `bigquery-public-data.google_analytics_sample.ga_sessions_*`,
+    UNNEST (hits) hits, 
+    UNNEST (product) product
+    WHERE 
+    _table_suffix between '20170601' and '20170731'
+    AND totals.transactions	>=1
+    AND productRevenue is NOT NULL 
+    GROUP BY month),
+
+   non_purchaser AS 
+    (SELECT 
+      format_date("%Y%m", parse_date("%Y%m%d", date)) as month,
+      (SUM (totals.pageviews)/ COUNT (distinct fullVisitorId)) AS avg_pageview_nonpurchase,
+    FROM `bigquery-public-data.google_analytics_sample.ga_sessions_*`,
+    UNNEST (hits) hits, 
+    UNNEST (product) product
+    WHERE _table_suffix BETWEEN '20170601' AND '20170731'
+    AND totals.transactions IS NULL
+    AND productRevenue is  NULL 
+    GROUP BY month)
+
+  SELECT 
+    p.*,
+    avg_pageview_nonpurchase
+  FROM purchaser as p
+  LEFT JOIN non_purchaser ON p.month = non_purchaser.month
+  ORDER BY p.month;
+  
+/Query 05: Average number of transactions per user that made a purchase in July 2017.
+
+    SELECT
+    (SUM (total_transactions_per_user) / COUNT(fullVisitorId) ) AS avg_total_transactions_per_user
+    FROM (
+    SELECT
+    fullVisitorId,
+    SUM (totals.transactions) AS total_transactions_per_user
+    FROM `bigquery-public-data.google_analytics_sample.ga_sessions_*`
+    WHERE _TABLE_SUFFIX BETWEEN '20170701' AND '20170731'
+    AND totals.transactions IS NOT NULL
+    GROUP BY fullVisitorId );
+    
+/Query 06: Average amount of money spent per session. Only include purchaser data in July 2017
+
+    SELECT 
+      format_date("%Y%m", parse_date("%Y%m%d", date)) as month,
+      (SUM (totals.totalTransactionRevenue)/ SUM (DISTINCT totals.visits)/power(10,6)) AS avg_revenue_by_user_per_visit
+   FROM `bigquery-public-data.google_analytics_sample.ga_sessions_*`,
+   UNNEST (hits) hits, 
+   UNNEST (product) product
+   WHERE _TABLE_SUFFIX BETWEEN '20170701' AND '20170731'
+    AND
+      totals.visits > 0
+      AND totals.transactions >= 1
+      AND totals.transactionRevenue IS NOT NULL
+   GROUP BY month;
+
+
+
+
+
+
+
